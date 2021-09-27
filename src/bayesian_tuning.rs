@@ -21,10 +21,10 @@ pub struct BayesianConfig {
 
 impl BayesianConfig {
     pub fn new(scenario: &Scenario) -> Self {
-        let population_size = 2;//10 * scenario.parameters().nb_params();
+        let population_size = 10 * scenario.parameters().nb_params();
         Self {
             population_size,
-            max_iterations:1,//5 * scenario.parameters().nb_params(),
+            max_iterations: 5 * scenario.parameters().nb_params(),
             select_size: (0.3 * population_size as f64).ceil() as usize,
             nb_children: population_size / 2,
         }
