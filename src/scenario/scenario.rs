@@ -11,8 +11,7 @@ pub struct Scenario {
     #[serde(skip)]
     parameters: Parameters,
 
-    #[serde(default)]
-    train_instances_dir: String,
+    train_instances_dir: Option<String>,
 
     #[serde(default)]
     train_instances: Vec<String>,
@@ -43,25 +42,28 @@ impl Scenario {
 
         scenario.parameters = Parameters::from_file(parameter_file);
 
-        if let Ok(dir) = fs::read_dir(scenario.train_instances_dir()) {
-            let mut instances = dir
-                .into_iter()
-                .map(|file| {
-                    if let Ok(file) = file {
-                        if let Ok(path) = fs::canonicalize(file.path()) {
-                            let str_path = path.clone().to_str().unwrap().to_string();
-                            return Some(str_path.clone());
+        if let Some(instaces_dir) = scenario.train_instances_dir() {
+            if let Ok(dir) = fs::read_dir(instaces_dir) {
+                let mut instances = dir
+                    .into_iter()
+                    .map(|file| {
+                        if let Ok(file) = file {
+                            if let Ok(path) = fs::canonicalize(file.path()) {
+                                let str_path = path.clone().to_str().unwrap().to_string();
+                                return Some(str_path.clone());
+                            }
                         }
-                    }
-                    None
-                })
-                .filter(|result| result.is_some())
-                .map(|path| path.unwrap())
-                .collect_vec();
+                        None
+                    })
+                    .filter(|result| result.is_some())
+                    .map(|path| path.unwrap())
+                    .collect_vec();
 
-            instances.par_sort();
+                instances.par_sort();
 
-            scenario = scenario.add_train_instances(instances.iter().map(|i| i.as_str()).collect_vec());
+                scenario = scenario
+                    .add_train_instances(instances.iter().map(|i| i.as_str()).collect_vec());
+            }
         }
 
         scenario
@@ -88,7 +90,7 @@ impl Scenario {
     }
 
     #[inline]
-    pub fn train_instances_dir(&self) -> &String {
+    pub fn train_instances_dir(&self) -> &Option<String> {
         &self.train_instances_dir
     }
 

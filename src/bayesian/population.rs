@@ -72,10 +72,13 @@ impl Individual {
 
             match result {
                 Ok(output) => {
-                    self.fitness += String::from_utf8(output.stdout)
-                        .expect("Bad output")
-                        .parse::<f64>()
-                        .expect("Output is not a float")
+                    let fitness: f64 = String::from_utf8(output.stdout)
+                    .expect("Bad output")
+                    .trim()
+                    .parse()
+                    .unwrap();
+
+                    self.fitness += fitness;
                 }
                 Err(error) => panic!("{}", error),
             }

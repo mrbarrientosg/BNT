@@ -1,3 +1,3 @@
-train_instances_dir = "C:\\Users\\Matias\\Downloads\\brkga_binp-master\\brkga_binp-master\\instances"
+#train_instances_dir = "C:\\Users\\Matias\\Downloads\\brkga_binp-master\\brkga_binp-master\\instances"
 train_instances = ["C:\\Users\\Matias\\Downloads\\brkga_binp-master\\brkga_binp-master\\instances\\t60_00"]
 target_runner = "C:\\Users\\Matias\\Downloads\\brkga_binp-master\\brkga_binp-master\\binp.exe"
