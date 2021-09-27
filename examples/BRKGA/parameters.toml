@@ -1,0 +1,59 @@
+[population]
+name = "population"
+switch = "-p"
+type = "i"
+domain = [20, 1000]
+
+[elites]
+name = "elites"
+switch = "-e"
+type = "c"
+domain = ["0.10", "0.125", "0.15", "0.175", "0.20", "0.225", "0.25"]
+
+[mutants]
+name = "mutants"
+switch = "-m"
+type = "c"
+domain = [
+    "0.10",
+    "0.125",
+    "0.15",
+    "0.175",
+    "0.20",
+    "0.225",
+    "0.25",
+    "0.275",
+    "0.30",
+]
+
+[allele]
+name = "elite allele"
+switch = "-n"
+type = "c"
+domain = [
+    "0.50",
+    "0.525",
+    "0.55",
+    "0.575",
+    "0.60",
+    "0.625",
+    "0.65",
+    "0.675",
+    "0.70",
+    "0.725",
+    "0.75",
+    "0.775",
+    "0.80",
+]
+
+[generations]
+name = "generations"
+switch = "-g"
+type = "c"
+domain = ["200", "250", "300", "350", "400", "450", "500"]
+
+[independet_populations]
+name = "independet populations"
+switch = "-k"
+type = "i"
+domain = [1, 5]
