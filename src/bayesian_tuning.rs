@@ -1,14 +1,15 @@
 use crate::{
     bayesian::{
         bayesian::BayesianNetwork,
-        population::{Individual, Population},
+        population::{Individual, Population, SolutionType},
     },
-    scenario::scenario::Scenario,
+    scenario::{parameter, scenario::Scenario},
 };
 
 use daggy::petgraph::dot::{Config, Dot};
 use is_executable::IsExecutable;
-use rand::{RngCore, SeedableRng, prelude::StdRng, thread_rng};
+use itertools::Itertools;
+use rand::{prelude::StdRng, thread_rng, RngCore, SeedableRng};
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use std::{cell::RefCell, path::Path, rc::Rc};
 
@@ -35,6 +36,7 @@ pub struct BayesianTuning<'a> {
     population: Rc<RefCell<Population>>,
     network: BayesianNetwork<'a>,
     config: BayesianConfig,
+    configurations: Vec<Vec<SolutionType>>,
 }
 
 impl<'a> BayesianTuning<'a> {
@@ -48,7 +50,35 @@ impl<'a> BayesianTuning<'a> {
             network,
             population,
             config,
+            configurations: vec![],
         }
+    }
+
+    pub(crate) fn save_configurations(&self) {
+        let mut csv = csv::Writer::from_path("configurations.csv").unwrap();
+
+        csv.write_record(
+            self.scenario
+                .parameters()
+                .into_iter()
+                .map(|param| param.name.clone())
+                .collect_vec(),
+        )
+        .unwrap();
+
+        for configuration in &self.configurations {
+            csv.write_record(
+                configuration
+                    .into_iter()
+                    .map(|solution| match solution {
+                        SolutionType::Integer(value) => value.to_string(),
+                        SolutionType::Categorical(value) => value.clone(),
+                    })
+                    .collect_vec(),
+            ).unwrap();
+        }
+
+        csv.flush().unwrap();
     }
 
     pub fn run(&mut self) {
@@ -60,12 +90,18 @@ impl<'a> BayesianTuning<'a> {
 
         self.population.try_borrow_mut().unwrap().sort();
 
+        for individual in self.population.try_borrow().unwrap().into_iter() {
+            self.configurations
+                .push(individual.get_configuration(self.scenario));
+        }
+
+        self.population.try_borrow_mut().unwrap().reduce();
+
+
         let mut best: Option<Individual> = Some(self.population.try_borrow().unwrap().best());
         let rng = thread_rng();
 
         for i in 0..self.config.max_iterations {
-            self.population.try_borrow_mut().unwrap().reduce();
-
             self.network.construct_network();
 
             let samples = self.network.sample(self.config.nb_children);
@@ -73,27 +109,42 @@ impl<'a> BayesianTuning<'a> {
             let mut individuals: Vec<Individual> = vec![];
 
             for sample in samples.iter() {
-                individuals.push(Individual::from_sample(sample));
+                let new_individual = Individual::from_sample(sample);
+                individuals.push(new_individual.clone());
+                self.configurations
+                    .push(new_individual.get_configuration(self.scenario));
             }
 
             {
                 let scenario = self.scenario;
                 let mut r = StdRng::from_rng(rng.clone()).unwrap();
-                let seeds: Vec<u32> = (0..scenario.train_instances().len()).map(|_| r.next_u32()).collect();
+                let seeds: Vec<u32> = (0..scenario.train_instances().len())
+                    .map(|_| r.next_u32())
+                    .collect();
 
                 individuals
                     .par_iter_mut()
                     .for_each(|indi| indi.run_target_runner(scenario, &seeds));
             }
 
-            self.population.try_borrow_mut().unwrap().add_individuals(&mut individuals);
+            self.population
+                .try_borrow_mut()
+                .unwrap()
+                .add_individuals(&mut individuals);
             self.population.try_borrow_mut().unwrap().sort();
             self.population.try_borrow_mut().unwrap().reduce();
 
             best = Some(self.population.try_borrow().unwrap().best());
-            print!("iteration = {}, fitness = {} ", i, best.as_ref().unwrap().fitness);
+            print!(
+                "iteration = {}, fitness = {} ",
+                i,
+                best.as_ref().unwrap().fitness
+            );
             best.as_ref().unwrap().print_solution(self.scenario);
         }
+
+        self.save_configurations();
+
         println!(
             "{:?}",
             Dot::with_config(self.network.dag(), &[Config::EdgeNoLabel])

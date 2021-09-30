@@ -1,17 +1,17 @@
 use std::{cell::RefCell, process::Command, rc::Rc};
 
-use crate::scenario::{parameter::Domain, scenario::Scenario};
+use crate::scenario::{self, parameter::Domain, scenario::Scenario};
 use rand::{Rng, RngCore, SeedableRng, prelude::StdRng, thread_rng};
 use rayon::{
     iter::{IntoParallelRefMutIterator, ParallelIterator},
     slice::ParallelSliceMut,
 };
 
-// #[derive(Debug, Clone)]
-// pub(crate) enum SolutionType {
-//     // TODO: Cambiar a que guarde el indice del rango, ver que hacer con los real despues
-//     Integer(usize),
-// }
+#[derive(Debug, Clone)]
+pub(crate) enum SolutionType {
+    Integer(usize),
+    Categorical(String)
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct Individual {
@@ -55,12 +55,25 @@ impl Individual {
         }
         println!()
     }
+
+    pub(crate) fn get_configuration(&self, scenario: &Scenario) -> Vec<SolutionType> {
+        let mut configuration: Vec<SolutionType> = vec![];
+
+        for (parameter, &idx) in scenario.parameters().into_iter().zip(self.solution.iter()) {
+            match parameter.domain {
+                Domain::Integer(_, _) => configuration.push(SolutionType::Integer(parameter.get_value(idx).parse().unwrap())),
+                Domain::Categorical(_) => configuration.push(SolutionType::Categorical(parameter.get_value(idx))),
+            }
+        }
+
+        configuration
+    }
     
     pub(crate) fn run_target_runner(&mut self, scenario: &Scenario, seeds: &Vec<u32>) {    
-        for (instance, seed) in scenario.train_instances().iter().zip(seeds.iter()) {
+        for ((id, instance), seed) in scenario.train_instances().iter().enumerate().zip(seeds.iter()) {
             let mut command = Command::new(scenario.target_runner());
 
-            command.arg("-i").arg(instance).arg("-s").arg(seed.to_string());
+            command.arg(id.to_string()).arg(id.to_string()).arg(seed.to_string()).arg(instance);
 
             for (parameter, &idx) in scenario.parameters().into_iter().zip(self.solution.iter()) {
                 command
@@ -68,20 +81,22 @@ impl Individual {
                     .arg(parameter.get_value(idx));
             }
 
-            let result = command.output();
+            println!("{:?}", command);
 
-            match result {
-                Ok(output) => {
-                    let fitness: f64 = String::from_utf8(output.stdout)
-                    .expect("Bad output")
-                    .trim()
-                    .parse()
-                    .unwrap();
+            // let result = command.output();
 
-                    self.fitness += fitness;
-                }
-                Err(error) => panic!("{}", error),
-            }
+            // match result {
+            //     Ok(output) => {
+            //         let fitness: f64 = String::from_utf8(output.stdout)
+            //         .expect("Bad output")
+            //         .trim()
+            //         .parse()
+            //         .unwrap();
+
+            //         self.fitness += fitness;
+            //     }
+            //     Err(error) => panic!("{}", error),
+            // }
         }
 
         self.fitness /= scenario.train_instances().len() as f64;
