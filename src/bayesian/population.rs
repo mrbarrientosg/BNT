@@ -1,20 +1,22 @@
 use std::{cell::RefCell, process::Command, rc::Rc};
 
-use crate::scenario::{self, parameter::Domain, scenario::Scenario};
-use rand::{Rng, RngCore, SeedableRng, prelude::StdRng, thread_rng};
+use crate::scenario::{parameter::Domain, scenario::Scenario};
+use rand::{prelude::StdRng, thread_rng, Rng, RngCore, SeedableRng};
 use rayon::{
     iter::{IntoParallelRefMutIterator, ParallelIterator},
     slice::ParallelSliceMut,
 };
+use uuid::{Builder, Uuid, Variant, Version};
 
 #[derive(Debug, Clone)]
 pub(crate) enum SolutionType {
     Integer(usize),
-    Categorical(String)
+    Categorical(String),
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct Individual {
+    id: Uuid,
     pub(crate) solution: Vec<usize>,
     pub(crate) fitness: f64,
 }
@@ -22,17 +24,18 @@ pub(crate) struct Individual {
 impl Individual {
     fn new(scenario: &Scenario) -> Self {
         let mut solution: Vec<usize> = vec![];
-        let mut rng = thread_rng();
+        let mut trng = thread_rng();
 
         for parameter in scenario.parameters() {
             let value = match parameter.domain {
-                Domain::Integer(_, _) => rng.gen_range(0..parameter.domain_size()) as usize,
-                Domain::Categorical(_) => rng.gen_range(0..parameter.domain_size()) as usize,
+                Domain::Integer(_, _) => trng.gen_range(0..parameter.domain_size()) as usize,
+                Domain::Categorical(_) => trng.gen_range(0..parameter.domain_size()) as usize,
             };
             solution.push(value);
         }
 
         Self {
+            id: Uuid::new_v4(),
             solution,
             fitness: -1.0,
         }
@@ -40,6 +43,7 @@ impl Individual {
 
     pub(crate) fn from_sample(sample: &Vec<usize>) -> Self {
         Self {
+            id: Uuid::new_v4(),
             solution: sample.clone(),
             fitness: -1.0,
         }
@@ -61,42 +65,51 @@ impl Individual {
 
         for (parameter, &idx) in scenario.parameters().into_iter().zip(self.solution.iter()) {
             match parameter.domain {
-                Domain::Integer(_, _) => configuration.push(SolutionType::Integer(parameter.get_value(idx).parse().unwrap())),
-                Domain::Categorical(_) => configuration.push(SolutionType::Categorical(parameter.get_value(idx))),
+                Domain::Integer(_, _) => configuration.push(SolutionType::Integer(
+                    parameter.get_value(idx).parse().unwrap(),
+                )),
+                Domain::Categorical(_) => {
+                    configuration.push(SolutionType::Categorical(parameter.get_value(idx)))
+                }
             }
         }
 
         configuration
     }
-    
-    pub(crate) fn run_target_runner(&mut self, scenario: &Scenario, seeds: &Vec<u32>) {    
-        for ((id, instance), seed) in scenario.train_instances().iter().enumerate().zip(seeds.iter()) {
+
+    pub(crate) fn run_target_runner(&mut self, scenario: &Scenario, seeds: &Vec<u32>) {
+        for ((id, instance), seed) in scenario
+            .train_instances()
+            .iter()
+            .enumerate()
+            .zip(seeds.iter())
+        {
             let mut command = Command::new(scenario.target_runner());
 
-            command.arg(id.to_string()).arg(id.to_string()).arg(seed.to_string()).arg(instance);
+            command
+                .arg(self.id.to_string())
+                .arg(id.to_string())
+                .arg(seed.to_string())
+                .arg(instance);
 
             for (parameter, &idx) in scenario.parameters().into_iter().zip(self.solution.iter()) {
-                command
-                    .arg(parameter.switch.clone())
-                    .arg(parameter.get_value(idx));
+                command.arg(parameter.switch.clone() + &parameter.get_value(idx));
             }
 
-            println!("{:?}", command);
+            let result = command.output();
 
-            // let result = command.output();
+            match result {
+                Ok(output) => {
+                    let fitness: f64 = String::from_utf8(output.stdout)
+                        .expect("Bad output")
+                        .trim()
+                        .parse()
+                        .unwrap();
 
-            // match result {
-            //     Ok(output) => {
-            //         let fitness: f64 = String::from_utf8(output.stdout)
-            //         .expect("Bad output")
-            //         .trim()
-            //         .parse()
-            //         .unwrap();
-
-            //         self.fitness += fitness;
-            //     }
-            //     Err(error) => panic!("{}", error),
-            // }
+                    self.fitness += fitness;
+                }
+                Err(error) => panic!("{}", error),
+            }
         }
 
         self.fitness /= scenario.train_instances().len() as f64;
@@ -124,7 +137,9 @@ impl Population {
 
         let rng = thread_rng();
         let mut r = StdRng::from_rng(rng.clone()).unwrap();
-        let seeds: Vec<u32> = (0..scenario.train_instances().len()).map(|_| r.next_u32()).collect();
+        let seeds: Vec<u32> = (0..scenario.train_instances().len())
+            .map(|_| r.next_u32())
+            .collect();
 
         individuals
             .par_iter_mut()
