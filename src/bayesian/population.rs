@@ -6,7 +6,6 @@ use rayon::{
     iter::{IntoParallelRefMutIterator, ParallelIterator},
     slice::ParallelSliceMut,
 };
-use uuid::{Builder, Uuid, Variant, Version};
 
 #[derive(Debug, Clone)]
 pub(crate) enum SolutionType {
@@ -16,7 +15,7 @@ pub(crate) enum SolutionType {
 
 #[derive(Debug, Clone)]
 pub(crate) struct Individual {
-    id: Uuid,
+    pub(crate) id: usize,
     pub(crate) solution: Vec<usize>,
     pub(crate) fitness: f64,
 }
@@ -35,7 +34,7 @@ impl Individual {
         }
 
         Self {
-            id: Uuid::new_v4(),
+            id: 0,
             solution,
             fitness: -1.0,
         }
@@ -43,7 +42,7 @@ impl Individual {
 
     pub(crate) fn from_sample(sample: &Vec<usize>) -> Self {
         Self {
-            id: Uuid::new_v4(),
+            id: 0,
             solution: sample.clone(),
             fitness: -1.0,
         }
@@ -57,7 +56,6 @@ impl Individual {
         for (parameter, &idx) in scenario.parameters().into_iter().zip(self.solution.iter()) {
             print!("{}={} ", parameter.name, parameter.get_value(idx));
         }
-        println!()
     }
 
     pub(crate) fn get_configuration(&self, scenario: &Scenario) -> Vec<SolutionType> {
@@ -121,6 +119,7 @@ pub(crate) struct Population {
     individuals: Vec<Individual>,
     population_size: usize,
     select_size: usize,
+    last_individual_id: usize,
 }
 
 impl Population {
@@ -130,9 +129,13 @@ impl Population {
         select_size: usize,
     ) -> Rc<RefCell<Self>> {
         let mut individuals: Vec<Individual> = vec![];
+        let mut last_individual_id = 0;
 
         for _ in 0..population_size {
-            individuals.push(Individual::new(scenario));
+            let mut individual = Individual::new(scenario);
+            individual.id = last_individual_id;
+            individuals.push(individual);
+            last_individual_id += 1;
         }
 
         let rng = thread_rng();
@@ -149,6 +152,7 @@ impl Population {
             individuals,
             population_size,
             select_size,
+            last_individual_id
         }))
     }
 
@@ -157,8 +161,13 @@ impl Population {
     }
 
     pub(crate) fn add_individuals(&mut self, individuals: &mut Vec<Individual>) {
+        individuals.iter_mut().for_each(|i| {
+            i.id = self.last_individual_id;
+            self.last_individual_id += 1;
+        });
+
         self.individuals.append(individuals);
-        self.population_size += 1;
+        self.population_size += individuals.len();
     }
 
     pub(crate) fn best(&self) -> Individual {
