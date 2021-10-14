@@ -123,19 +123,21 @@ pub(crate) struct Population {
 }
 
 impl Population {
-    pub(crate) fn new(
-        scenario: &Scenario,
-        population_size: usize,
-        select_size: usize,
-    ) -> Rc<RefCell<Self>> {
-        let mut individuals: Vec<Individual> = vec![];
-        let mut last_individual_id = 0;
+    pub(crate) fn new(population_size: usize, select_size: usize) -> Rc<RefCell<Self>> {
+        Rc::new(RefCell::new(Self {
+            individuals: vec![],
+            population_size,
+            select_size,
+            last_individual_id: 0,
+        }))
+    }
 
-        for _ in 0..population_size {
+    pub(crate) fn initialize(&mut self, scenario: &Scenario) {
+        for _ in 0..self.population_size {
             let mut individual = Individual::new(scenario);
-            individual.id = last_individual_id;
-            individuals.push(individual);
-            last_individual_id += 1;
+            individual.id = self.last_individual_id;
+            self.individuals.push(individual);
+            self.last_individual_id += 1;
         }
 
         let rng = thread_rng();
@@ -144,16 +146,9 @@ impl Population {
             .map(|_| r.next_u32())
             .collect();
 
-        individuals
+        self.individuals
             .par_iter_mut()
             .for_each(|indi| indi.run_target_runner(scenario, &seeds));
-
-        Rc::new(RefCell::new(Self {
-            individuals,
-            population_size,
-            select_size,
-            last_individual_id
-        }))
     }
 
     pub(crate) fn population_size(&self) -> usize {

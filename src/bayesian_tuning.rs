@@ -41,7 +41,7 @@ pub struct BayesianTuning<'a> {
 
 impl<'a> BayesianTuning<'a> {
     pub fn new(scenario: &'a Scenario, config: BayesianConfig) -> Self {
-        let population = Population::new(scenario, config.population_size, config.select_size);
+        let population = Population::new(config.population_size, config.select_size);
 
         let network = BayesianNetwork::new(scenario, Rc::clone(&population));
 
@@ -106,6 +106,7 @@ impl<'a> BayesianTuning<'a> {
         println!("# New individual size: {}", self.config.nb_children);
         println!("");
 
+        self.population.try_borrow_mut().unwrap().initialize(self.scenario);
         self.population.try_borrow_mut().unwrap().sort();
 
         for individual in self.population.try_borrow().unwrap().into_iter() {
