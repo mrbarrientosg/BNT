@@ -98,9 +98,13 @@ impl Individual {
 
             match result {
                 Ok(output) => {
-                    match String::from_utf8(output.stderr) {
-                        Ok(err) => eprintln!("{}", err),
-                        Err(_) => (),
+                    let error = match String::from_utf8(output.stderr) {
+                        Ok(err) => err,
+                        Err(_) => "".to_string(),
+                    };
+
+                    if !error.is_empty() {
+                        eprintln!("{}", error);
                     }
                     
                     let fitness: f64 = String::from_utf8(output.stdout)
