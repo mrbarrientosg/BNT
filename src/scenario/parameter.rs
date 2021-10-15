@@ -43,7 +43,7 @@ impl Parameter {
 #[derive(Debug)]
 pub struct Parameters {
     map_params: HashMap<String, Parameter>,
-    params: Vec<Parameter>,
+    pub(crate) params: Vec<Parameter>,
     nb_params: usize,
 }
 

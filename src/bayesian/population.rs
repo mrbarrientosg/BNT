@@ -1,6 +1,6 @@
 use std::{cell::RefCell, process::Command, rc::Rc};
 
-use crate::scenario::{self, parameter::Domain, scenario::Scenario};
+use crate::scenario::{parameter::Domain, scenario::Scenario};
 use rand::{prelude::StdRng, thread_rng, Rng, RngCore, SeedableRng};
 use rayon::{
     iter::{IntoParallelRefMutIterator, ParallelIterator},
@@ -125,7 +125,7 @@ impl Individual {
 
 #[derive(Debug)]
 pub(crate) struct Population {
-    individuals: Vec<Individual>,
+    pub(crate) individuals: Vec<Individual>,
     population_size: usize,
     select_size: usize,
     last_individual_id: usize,

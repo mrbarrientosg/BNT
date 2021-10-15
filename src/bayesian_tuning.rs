@@ -9,8 +9,6 @@ use crate::{
 use daggy::petgraph::dot::{Config, Dot};
 use is_executable::IsExecutable;
 use itertools::Itertools;
-use rand::{prelude::StdRng, thread_rng, RngCore, SeedableRng};
-use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use std::{cell::RefCell, path::Path, rc::Rc};
 
 pub struct BayesianConfig {

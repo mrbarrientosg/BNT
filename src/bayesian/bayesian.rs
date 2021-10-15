@@ -2,6 +2,7 @@ use crate::scenario::scenario::Scenario;
 use crate::utils::*;
 use daggy::petgraph::algo::toposort;
 
+use daggy::petgraph::dot::{Config, Dot};
 use daggy::{Dag, NodeIndex, Walker};
 use factorial::Factorial;
 use itertools::Itertools;
@@ -60,98 +61,163 @@ impl<'a> BayesianNetwork<'a> {
 
         self.graph = graph;
 
-        let max_edges = 3 * self.scenario.parameters().nb_params();
-        let mut gains: Vec<Vec<f64>> = vec![];
+        let max_edges = self.scenario.parameters().nb_params();
+        // let mut gains: Vec<Vec<f64>> = vec![];
 
-        for _ in 0..max_edges {
-            let mut max_value = -1.0;
-            let mut from: usize = 0;
-            let mut to: usize = 0;
+        for node in 0..max_edges {
+            let mut p_old = self.cooper_herskovits(node.into());
+            let parent_size = self.graph.parents(node.into()).iter(&self.graph).count();
 
-            for (i, _) in self.scenario.parameters().into_iter().enumerate() {
-                let gain = self.compute_gains(NodeIndex::new(i));
+            let mut proceed = true;
 
-                gains.push(gain);
+            while proceed && parent_size < 2 {
+                let mut p_max: Vec<f64> = vec![];
+                let pred = &self.scenario.parameters().params[..node];
+                let mut candidates_params: Vec<usize> = vec![];
 
-                for (j, _) in self.scenario.parameters().into_iter().enumerate() {
-                    let current_value = gains[i][j];
-                    if current_value > max_value {
-                        from = i;
-                        to = j;
-                        max_value = current_value;
+                for (i, p) in pred.iter().enumerate() {
+                    let c = self
+                        .graph
+                        .parents(node.into())
+                        .iter(&self.graph)
+                        .map(|(_, n)| &self.graph[n])
+                        .filter(|&n| n.name == p.name)
+                        .count();
+
+                    if c == 0 || self.graph.parents(node.into()).iter(&self.graph).count() == 0 {
+                        candidates_params.push(i);
                     }
                 }
-            }
 
-            if max_value <= 0.0 {
-                break;
-            }
+                if !candidates_params.is_empty() {
+                    for j in candidates_params {
+                        let index = self
+                            .graph
+                            .add_edge(NodeIndex::new(j), NodeIndex::new(node), 1)
+                            .unwrap();
 
-            self.graph
-                .add_edge(NodeIndex::new(from), NodeIndex::new(to), 1).unwrap();
+                        // println!(
+                        //     "{:?}",
+                        //     Dot::with_config(&self.graph, &[Config::EdgeNoLabel])
+                        // );
+                        p_max.push(self.cooper_herskovits(node.into()));
+                        self.graph.remove_edge(index).unwrap();
 
-            gains.clear();
-        }
-    }
-
-    fn compute_gains(&self, node_index: NodeIndex<usize>) -> Vec<f64> {
-        let mut gains: Vec<f64> = vec![-1.0; self.size];
-        let mut viable: Vec<NodeIndex<usize>> = vec![];
-
-        for i in 0..self.graph.node_count() {
-            let current_node = NodeIndex::new(i);
-            let mut childrens = self.graph.children(node_index);
-
-            if current_node != node_index
-                && !node_is_children(current_node, &mut childrens, &self.graph)
-                && !self.path_exists(current_node, node_index)
-            {
-                viable.push(current_node);
-            }
-        }
-
-        for i in 0..self.graph.node_count() {
-            let candidate_node = NodeIndex::new(i);
-            let parents_size = self.graph.parents(candidate_node).iter(&self.graph).count();
-
-            if parents_size < 2 && viable.contains(&candidate_node) {
-                gains[i] = self.cooper_herskovits(candidate_node);
-            } else {
-                gains[i] = -1.0;
-            }
-        }
-
-        gains
-    }
-
-    fn path_exists(&self, i: NodeIndex<usize>, j: NodeIndex<usize>) -> bool {
-        let mut visited: Vec<NodeIndex<usize>> = vec![];
-        let mut stack: Vec<NodeIndex<usize>> = vec![];
-
-        stack.push(i);
-
-        while !stack.is_empty() {
-            if stack.contains(&j) {
-                return true;
-            }
-
-            let k = stack.pop().unwrap();
-
-            if !visited.contains(&k) {
-                visited.push(k);
-
-                let mut children = self.graph.children(k);
-
-                while let Some((_, node)) = children.walk_next(&self.graph) {
-                    if !visited.contains(&node) {
-                        stack.push(node);
+                        // println!(
+                        //     "{:?}",
+                        //     Dot::with_config(&self.graph, &[Config::EdgeNoLabel])
+                        // );
                     }
+                } else {
+                    p_max.push(self.cooper_herskovits(node.into()));
                 }
-            }
-        }
 
-        false
+                let from = p_max
+                    .iter()
+                    .position_max_by(|&a, &b| a.partial_cmp(b).unwrap())
+                    .unwrap();
+                let p_new = p_max[from];
+
+                if p_new > p_old {
+                    p_old = p_new;
+                    self.graph
+                        .add_edge(NodeIndex::new(from), NodeIndex::new(node), 1)
+                        .unwrap();
+                } else {
+                    proceed = false;
+                }
+
+                // println!("{:?}", p_max);
+            }
+
+            // let mut max_value = -1.0;
+            // let mut from: usize = 0;
+            // let mut to: usize = 0;
+
+            // for (i, _) in self.scenario.parameters().into_iter().enumerate() {
+            //     let gain = self.compute_gains(NodeIndex::new(i));
+
+            //     gains.push(gain);
+
+            //     for (j, _) in self.scenario.parameters().into_iter().enumerate() {
+            //         let current_value = gains[i][j];
+            //         if current_value > max_value {
+            //             from = i;
+            //             to = j;
+            //             max_value = current_value;
+            //         }
+            //     }
+            // }
+
+            // if max_value <= 0.0 {
+            //     break;
+            // }
+
+            // self.graph
+            //     .add_edge(NodeIndex::new(from), NodeIndex::new(to), 1).unwrap();
+
+            // gains.clear();
+        }
     }
+
+    // fn compute_gains(&self, node_index: NodeIndex<usize>) -> Vec<f64> {
+    //     let mut gains: Vec<f64> = vec![-1.0; self.size];
+    //     let mut viable: Vec<NodeIndex<usize>> = vec![];
+
+    //     for i in 0..self.graph.node_count() {
+    //         let current_node = NodeIndex::new(i);
+    //         let mut childrens = self.graph.children(node_index);
+
+    //         if current_node != node_index
+    //             && !node_is_children(current_node, &mut childrens, &self.graph)
+    //             && !self.path_exists(current_node, node_index)
+    //         {
+    //             viable.push(current_node);
+    //         }
+    //     }
+
+    //     for i in 0..self.graph.node_count() {
+    //         let candidate_node = NodeIndex::new(i);
+    //         let parents_size = self.graph.parents(candidate_node).iter(&self.graph).count();
+
+    //         if parents_size < 2 && viable.contains(&candidate_node) {
+    //             gains[i] = self.cooper_herskovits(candidate_node);
+    //         } else {
+    //             gains[i] = -1.0;
+    //         }
+    //     }
+
+    //     gains
+    // }
+
+    // fn path_exists(&self, i: NodeIndex<usize>, j: NodeIndex<usize>) -> bool {
+    //     let mut visited: Vec<NodeIndex<usize>> = vec![];
+    //     let mut stack: Vec<NodeIndex<usize>> = vec![];
+
+    //     stack.push(i);
+
+    //     while !stack.is_empty() {
+    //         if stack.contains(&j) {
+    //             return true;
+    //         }
+
+    //         let k = stack.pop().unwrap();
+
+    //         if !visited.contains(&k) {
+    //             visited.push(k);
+
+    //             let mut children = self.graph.children(k);
+
+    //             while let Some((_, node)) = children.walk_next(&self.graph) {
+    //                 if !visited.contains(&node) {
+    //                     stack.push(node);
+    //                 }
+    //             }
+    //         }
+    //     }
+
+    //     false
+    // }
 
     fn cooper_herskovits(&self, candidate_node: NodeIndex<usize>) -> f64 {
         let mut prod: f64 = 1.0;
@@ -429,5 +495,79 @@ impl<'a> BayesianNetwork<'a> {
         prob.iter()
             .map(|v| *v / self.population.borrow().population_size() as f64)
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod bayesian_tests {
+    use daggy::petgraph::dot::{Config, Dot};
+
+    use crate::{
+        bayesian::{
+            bayesian::BayesianNetwork,
+            population::{Individual, Population},
+        },
+        scenario::{
+            parameter::{Domain, Parameter},
+            scenario::Scenario,
+        },
+    };
+
+    #[test]
+    fn network_creation() {
+        let scenario = Scenario::new()
+            .add_parameter(Parameter::new("x1", "x1", Domain::Integer(0, 1)))
+            .add_parameter(Parameter::new("x2", "x2", Domain::Integer(0, 1)))
+            .add_parameter(Parameter::new("x3", "x3", Domain::Integer(0, 1)));
+
+        let population = Population::new(10, 10);
+        population
+            .borrow_mut()
+            .individuals
+            .push(Individual::from_sample(&vec![1, 0, 0]));
+        population
+            .borrow_mut()
+            .individuals
+            .push(Individual::from_sample(&vec![1, 1, 1]));
+        population
+            .borrow_mut()
+            .individuals
+            .push(Individual::from_sample(&vec![0, 0, 1]));
+        population
+            .borrow_mut()
+            .individuals
+            .push(Individual::from_sample(&vec![1, 1, 1]));
+        population
+            .borrow_mut()
+            .individuals
+            .push(Individual::from_sample(&vec![0, 0, 0]));
+        population
+            .borrow_mut()
+            .individuals
+            .push(Individual::from_sample(&vec![0, 1, 1]));
+        population
+            .borrow_mut()
+            .individuals
+            .push(Individual::from_sample(&vec![1, 1, 1]));
+        population
+            .borrow_mut()
+            .individuals
+            .push(Individual::from_sample(&vec![0, 0, 0]));
+        population
+            .borrow_mut()
+            .individuals
+            .push(Individual::from_sample(&vec![1, 1, 1]));
+        population
+            .borrow_mut()
+            .individuals
+            .push(Individual::from_sample(&vec![0, 0, 0]));
+
+        let mut bayesian = BayesianNetwork::new(&scenario, population);
+        bayesian.construct_network();
+
+        println!(
+            "{:?}",
+            Dot::with_config(&bayesian.graph, &[Config::EdgeNoLabel])
+        );
     }
 }
