@@ -106,7 +106,10 @@ impl<'a> BayesianTuning<'a> {
         println!("# New individual size: {}", self.config.nb_children);
         println!("");
 
-        self.population.try_borrow_mut().unwrap().initialize(self.scenario);
+        self.population
+            .try_borrow_mut()
+            .unwrap()
+            .initialize(self.scenario);
         self.population.try_borrow_mut().unwrap().sort();
 
         for individual in self.population.try_borrow().unwrap().into_iter() {
@@ -116,7 +119,6 @@ impl<'a> BayesianTuning<'a> {
         self.population.try_borrow_mut().unwrap().reduce();
 
         let mut best: Option<Individual> = Some(self.population.try_borrow().unwrap().best());
-        let rng = thread_rng();
 
         for i in 0..self.config.max_iterations {
             println!("# Iteration {} of {}", i + 1, self.config.max_iterations);
@@ -125,30 +127,16 @@ impl<'a> BayesianTuning<'a> {
 
             let samples = self.network.sample(self.config.nb_children);
 
-            let mut individuals: Vec<Individual> = vec![];
+            let individuals = self
+                .population
+                .try_borrow_mut()
+                .unwrap()
+                .run_new_individuals(&samples, self.scenario);
 
-            for sample in samples.iter() {
-                let new_individual = Individual::from_sample(sample);
-                individuals.push(new_individual.clone());
+            for new_individual in individuals.iter() {
                 self.configurations.push(new_individual.clone());
             }
 
-            {
-                let scenario = self.scenario;
-                let mut r = StdRng::from_rng(rng.clone()).unwrap();
-                let seeds: Vec<u32> = (0..scenario.train_instances().len())
-                    .map(|_| r.next_u32())
-                    .collect();
-
-                individuals
-                    .par_iter_mut()
-                    .for_each(|indi| indi.run_target_runner(scenario, &seeds));
-            }
-
-            self.population
-                .try_borrow_mut()
-                .unwrap()
-                .add_individuals(&mut individuals);
             self.population.try_borrow_mut().unwrap().sort();
             self.population.try_borrow_mut().unwrap().reduce();
 

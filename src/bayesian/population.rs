@@ -1,6 +1,6 @@
 use std::{cell::RefCell, process::Command, rc::Rc};
 
-use crate::scenario::{parameter::Domain, scenario::Scenario};
+use crate::scenario::{self, parameter::Domain, scenario::Scenario};
 use rand::{prelude::StdRng, thread_rng, Rng, RngCore, SeedableRng};
 use rayon::{
     iter::{IntoParallelRefMutIterator, ParallelIterator},
@@ -106,7 +106,7 @@ impl Individual {
                     if !error.is_empty() {
                         eprintln!("{}", error);
                     }
-                    
+
                     let fitness: f64 = String::from_utf8(output.stdout)
                         .expect("Bad output")
                         .trim()
@@ -164,14 +164,37 @@ impl Population {
         self.population_size
     }
 
-    pub(crate) fn add_individuals(&mut self, individuals: &mut Vec<Individual>) {
-        individuals.iter_mut().for_each(|i| {
-            i.id = self.last_individual_id;
-            self.last_individual_id += 1;
-        });
+    pub(crate) fn run_new_individuals(
+        &mut self,
+        samples: &Vec<Vec<usize>>,
+        scenario: &Scenario,
+    ) -> Vec<Individual> {
+        let mut individuals: Vec<Individual> = vec![];
 
-        self.individuals.append(individuals);
+        for sample in samples.iter() {
+            let mut new_individual = Individual::from_sample(sample);
+            new_individual.id = self.last_individual_id;
+            individuals.push(new_individual);
+            self.last_individual_id += 1;
+        }
+
+        let rng = thread_rng();
+
+        let mut r = StdRng::from_rng(rng.clone()).unwrap();
+        let seeds: Vec<u32> = (0..scenario.train_instances().len())
+            .map(|_| r.next_u32())
+            .collect();
+
+        individuals
+            .par_iter_mut()
+            .for_each(|indi| indi.run_target_runner(scenario, &seeds));
+
+        let copy_individuals = individuals.clone();
+
+        self.individuals.append(&mut individuals);
         self.population_size += individuals.len();
+
+        copy_individuals
     }
 
     pub(crate) fn best(&self) -> Individual {
