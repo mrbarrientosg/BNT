@@ -61,7 +61,41 @@ impl<'a> BayesianNetwork<'a> {
 
         self.graph = graph;
 
-        // let max_edges = self.scenario.parameters().nb_params();
+        let max_edges = 3 * self.population.borrow().population_size();
+        let mut gains: Vec<Vec<f64>> = vec![];
+
+        for _ in 0..max_edges {
+            let mut max = -1.0;
+            let mut from: i32 = -1;
+            let mut to: i32 = -1;
+
+            for i in 0..self.scenario.parameters().nb_params() {
+                let gain = self.compute_gains(i.into());
+                gains.push(gain);
+
+                for j in 0..self.scenario.parameters().nb_params() {
+                    if gains[i][j] > max {
+                        from = i as i32;
+                        to = j as i32;
+                        max = gains[i][j];
+                    }
+                }
+            }
+
+            if max <= 0.0 {
+                break;
+            }
+
+            self.graph
+                .add_edge(
+                    NodeIndex::new(from as usize),
+                    NodeIndex::new(to as usize),
+                    1,
+                )
+                .unwrap();
+
+            gains.clear();
+        }
 
         // for node in 0..max_edges {
         //     let mut p_old = self.cooper_herskovits(node.into());
@@ -135,209 +169,213 @@ impl<'a> BayesianNetwork<'a> {
         //     }
         // }
 
-        let mut gains: Vec<Vec<f64>> =
-            vec![
-                vec![std::f64::NEG_INFINITY; self.scenario.parameters().nb_params()];
-                self.scenario.parameters().nb_params()
-            ];
-        let mut node_scores: Vec<f64> = vec![0.0; self.scenario.parameters().nb_params()];
-        let mut inheritance_mat: Vec<Vec<bool>> =
-            vec![
-                vec![false; self.scenario.parameters().nb_params()];
-                self.scenario.parameters().nb_params()
-            ];
-        let mut child_count = vec![0; self.scenario.parameters().nb_params()];
+        // let mut gains: Vec<Vec<f64>> =
+        //     vec![
+        //         vec![std::f64::NEG_INFINITY; self.scenario.parameters().nb_params()];
+        //         self.scenario.parameters().nb_params()
+        //     ];
+        // let mut node_scores: Vec<f64> = vec![0.0; self.scenario.parameters().nb_params()];
+        // let mut inheritance_mat: Vec<Vec<bool>> =
+        //     vec![
+        //         vec![false; self.scenario.parameters().nb_params()];
+        //         self.scenario.parameters().nb_params()
+        //     ];
+        // let mut child_count = vec![0; self.scenario.parameters().nb_params()];
 
-        for i in 0..self.scenario.parameters().nb_params() {
-            node_scores[i] = self.cooper_herskovits(i.into());
-        }
+        // for i in 0..self.scenario.parameters().nb_params() {
+        //     node_scores[i] = self.cooper_herskovits(i.into());
+        // }
 
-        for i in 0..self.scenario.parameters().nb_params() {
-            for j in (i + 1)..self.scenario.parameters().nb_params() {
-                let index = self
-                    .graph
-                    .add_edge(NodeIndex::new(j), NodeIndex::new(i), 1)
-                    .unwrap();
+        // for i in 0..self.scenario.parameters().nb_params() {
+        //     for j in (i + 1)..self.scenario.parameters().nb_params() {
+        //         let index = self
+        //             .graph
+        //             .add_edge(NodeIndex::new(j), NodeIndex::new(i), 1)
+        //             .unwrap();
 
-                let new_score = self.cooper_herskovits(i.into());
+        //         let new_score = self.cooper_herskovits(i.into());
 
-                self.graph.remove_edge(index).unwrap();
+        //         self.graph.remove_edge(index).unwrap();
 
-                gains[i][j] = new_score - node_scores[i];
-                gains[j][i] = gains[i][j];
-            }
-        }
+        //         gains[i][j] = new_score - node_scores[i];
+        //         gains[j][i] = gains[i][j];
+        //     }
+        // }
 
-        loop {
-            let (mut child, mut parent): (usize, usize) = (0, 0);
-            let mut max = std::f64::NEG_INFINITY;
+        // loop {
+        //     let (mut child, mut parent): (usize, usize) = (0, 0);
+        //     let mut max = std::f64::NEG_INFINITY;
 
-            for i in 0..gains.len() {
-                for j in 0..gains[i].len() {
-                    if gains[i][j] > max {
-                        max = gains[i][j];
-                        child = j;
-                        parent = i;
-                    }
-                }
-            }
+        //     for i in 0..gains.len() {
+        //         for j in 0..gains[i].len() {
+        //             if gains[i][j] > max {
+        //                 max = gains[i][j];
+        //                 child = j;
+        //                 parent = i;
+        //             }
+        //         }
+        //     }
 
-            if gains[child][parent] == std::f64::NEG_INFINITY {
-                break;
-            }
+        //     if gains[child][parent] == std::f64::NEG_INFINITY {
+        //         break;
+        //     }
 
-            self.graph
-                .add_edge(NodeIndex::new(parent), NodeIndex::new(child), 1)
-                .unwrap();
+        //     self.graph
+        //         .add_edge(NodeIndex::new(parent), NodeIndex::new(child), 1)
+        //         .unwrap();
 
-            node_scores[child] += gains[child][parent];
+        //     node_scores[child] += gains[child][parent];
 
-            gains[child][parent] = std::f64::NEG_INFINITY;
-            gains[parent][child] = gains[child][parent];
+        //     gains[child][parent] = std::f64::NEG_INFINITY;
+        //     gains[parent][child] = gains[child][parent];
 
-            inheritance_mat[child][parent] = true;
+        //     inheritance_mat[child][parent] = true;
 
-            let mut new_ancestors = vec![parent];
+        //     let mut new_ancestors = vec![parent];
 
-            for i in 0..self.scenario.parameters().nb_params() {
-                if inheritance_mat[parent][i] == true && inheritance_mat[child][i] == false {
-                    new_ancestors.push(i);
-                    inheritance_mat[child][i] = true;
-                    gains[i][child] = std::f64::NEG_INFINITY;
-                }
-            }
+        //     for i in 0..self.scenario.parameters().nb_params() {
+        //         if inheritance_mat[parent][i] == true && inheritance_mat[child][i] == false {
+        //             new_ancestors.push(i);
+        //             inheritance_mat[child][i] = true;
+        //             gains[i][child] = std::f64::NEG_INFINITY;
+        //         }
+        //     }
 
-            let mut child_column: Vec<bool> = vec![false; self.scenario.parameters().nb_params()];
+        //     let mut child_column: Vec<bool> = vec![false; self.scenario.parameters().nb_params()];
 
-            for i in 0..self.scenario.parameters().nb_params() {
-                child_column[i] = inheritance_mat[i][child];
-            }
+        //     for i in 0..self.scenario.parameters().nb_params() {
+        //         child_column[i] = inheritance_mat[i][child];
+        //     }
 
-            let mut descendents = child_column
-                .iter()
-                .enumerate()
-                .filter(|(_, &b)| b == true)
-                .map(|(i, _)| i)
-                .collect_vec();
+        //     let mut descendents = child_column
+        //         .iter()
+        //         .enumerate()
+        //         .filter(|(_, &b)| b == true)
+        //         .map(|(i, _)| i)
+        //         .collect_vec();
 
-            while !descendents.is_empty() {
-                let node = descendents.remove(0);
-                let mut node_updated = false;
+        //     while !descendents.is_empty() {
+        //         let node = descendents.remove(0);
+        //         let mut node_updated = false;
 
-                for ancestor in new_ancestors.iter() {
-                    if inheritance_mat[node][*ancestor] == false {
-                        inheritance_mat[node][*ancestor] = true;
-                        gains[*ancestor][node] = std::f64::NEG_INFINITY;
-                        node_updated = true;
-                    }
-                }
+        //         for ancestor in new_ancestors.iter() {
+        //             if inheritance_mat[node][*ancestor] == false {
+        //                 inheritance_mat[node][*ancestor] = true;
+        //                 gains[*ancestor][node] = std::f64::NEG_INFINITY;
+        //                 node_updated = true;
+        //             }
+        //         }
 
-                if node_updated {
-                    let mut child_column: Vec<bool> = vec![false; inheritance_mat.len()];
+        //         if node_updated {
+        //             let mut child_column: Vec<bool> = vec![false; inheritance_mat.len()];
 
-                    for i in 0..inheritance_mat.len() {
-                        child_column[i] = inheritance_mat[i][node];
-                    }
+        //             for i in 0..inheritance_mat.len() {
+        //                 child_column[i] = inheritance_mat[i][node];
+        //             }
 
-                    descendents.append(
-                        &mut child_column
-                            .iter()
-                            .enumerate()
-                            .filter(|(_, &b)| b == true)
-                            .map(|(i, _)| i)
-                            .collect_vec(),
-                    );
+        //             descendents.append(
+        //                 &mut child_column
+        //                     .iter()
+        //                     .enumerate()
+        //                     .filter(|(_, &b)| b == true)
+        //                     .map(|(i, _)| i)
+        //                     .collect_vec(),
+        //             );
 
-                    descendents = descendents.iter().unique().map(|a| *a).collect_vec();
-                }
-            }
+        //             descendents = descendents.iter().unique().map(|a| *a).collect_vec();
+        //         }
+        //     }
 
-            for i in 0..self.scenario.parameters().nb_params() {
-                if self.graph.find_edge(i.into(), child.into()).is_none()
-                    && inheritance_mat[i][child] == false
-                    && child != i
-                {
-                    let index = self
-                        .graph
-                        .add_edge(NodeIndex::new(i), NodeIndex::new(child), 1)
-                        .unwrap();
+        //     for i in 0..self.scenario.parameters().nb_params() {
+        //         if self.graph.find_edge(i.into(), child.into()).is_none()
+        //             && inheritance_mat[i][child] == false
+        //             && child != i
+        //         {
+        //             let index = self
+        //                 .graph
+        //                 .add_edge(NodeIndex::new(i), NodeIndex::new(child), 1)
+        //                 .unwrap();
 
-                    let new_score = self.cooper_herskovits(child.into());
+        //             let new_score = self.cooper_herskovits(child.into());
 
-                    self.graph.remove_edge(index).unwrap();
+        //             self.graph.remove_edge(index).unwrap();
 
-                    gains[child][i] = new_score - node_scores[child];
-                }
-            }
+        //             gains[child][i] = new_score - node_scores[child];
+        //         }
+        //     }
 
-            child_count[child] += 1;
+        //     child_count[child] += 1;
 
-            if child_count[child] == (self.scenario.parameters().nb_params() / 2) {
-                for j in 0..self.scenario.parameters().nb_params() {
-                    gains[child][j] = std::f64::NEG_INFINITY;
-                }
-            }
-        }
+        //     if child_count[child] == (self.scenario.parameters().nb_params() / 2) {
+        //         for j in 0..self.scenario.parameters().nb_params() {
+        //             gains[child][j] = std::f64::NEG_INFINITY;
+        //         }
+        //     }
+        // }
     }
 
-    // fn compute_gains(&self, node_index: NodeIndex<usize>) -> Vec<f64> {
-    //     let mut gains: Vec<f64> = vec![-1.0; self.size];
-    //     let mut viable: Vec<NodeIndex<usize>> = vec![];
+    fn compute_gains(&mut self, node_index: NodeIndex<usize>) -> Vec<f64> {
+        let mut gains: Vec<f64> = vec![-1.0; self.size];
+        let mut viable: Vec<NodeIndex<usize>> = vec![];
 
-    //     for i in 0..self.graph.node_count() {
-    //         let current_node = NodeIndex::new(i);
-    //         let mut childrens = self.graph.children(node_index);
+        for i in 0..self.graph.node_count() {
+            let current_node = NodeIndex::new(i);
+            let mut childrens = self.graph.children(node_index);
 
-    //         if current_node != node_index
-    //             && !node_is_children(current_node, &mut childrens, &self.graph)
-    //             && !self.path_exists(current_node, node_index)
-    //         {
-    //             viable.push(current_node);
-    //         }
-    //     }
+            if current_node != node_index
+                && !node_is_children(current_node, &mut childrens, &self.graph)
+                && !self.path_exists(current_node, node_index)
+            {
+                viable.push(current_node);
+            }
+        }
 
-    //     for i in 0..self.graph.node_count() {
-    //         let candidate_node = NodeIndex::new(i);
-    //         let parents_size = self.graph.parents(candidate_node).iter(&self.graph).count();
+        for i in 0..self.graph.node_count() {
+            let parents_size = self.graph.parents(i.into()).iter(&self.graph).count();
 
-    //         if parents_size < 2 && viable.contains(&candidate_node) {
-    //             gains[i] = self.cooper_herskovits(candidate_node);
-    //         } else {
-    //             gains[i] = -1.0;
-    //         }
-    //     }
+            if parents_size < 3 && viable.contains(&i.into()) {
+                let index = self
+                    .graph
+                    .add_edge(node_index.clone(), NodeIndex::new(i), 1)
+                    .unwrap();
+                gains[i] = self.cooper_herskovits(i.into());
+                self.graph.remove_edge(index);
+            } else {
+                gains[i] = -1.0;
+            }
+        }
 
-    //     gains
-    // }
+        gains
+    }
 
-    // fn path_exists(&self, i: NodeIndex<usize>, j: NodeIndex<usize>) -> bool {
-    //     let mut visited: Vec<NodeIndex<usize>> = vec![];
-    //     let mut stack: Vec<NodeIndex<usize>> = vec![];
+    fn path_exists(&self, i: NodeIndex<usize>, j: NodeIndex<usize>) -> bool {
+        let mut visited: Vec<NodeIndex<usize>> = vec![];
+        let mut stack: Vec<NodeIndex<usize>> = vec![];
 
-    //     stack.push(i);
+        stack.push(i);
 
-    //     while !stack.is_empty() {
-    //         if stack.contains(&j) {
-    //             return true;
-    //         }
+        while !stack.is_empty() {
+            if stack.contains(&j) {
+                return true;
+            }
 
-    //         let k = stack.pop().unwrap();
+            let k = stack.pop().unwrap();
 
-    //         if !visited.contains(&k) {
-    //             visited.push(k);
+            if !visited.contains(&k) {
+                visited.push(k);
 
-    //             let mut children = self.graph.children(k);
+                let mut children = self.graph.children(k);
 
-    //             while let Some((_, node)) = children.walk_next(&self.graph) {
-    //                 if !visited.contains(&node) {
-    //                     stack.push(node);
-    //                 }
-    //             }
-    //         }
-    //     }
+                while let Some((_, node)) = children.walk_next(&self.graph) {
+                    if !visited.contains(&node) {
+                        stack.push(node);
+                    }
+                }
+            }
+        }
 
-    //     false
-    // }
+        false
+    }
 
     fn cooper_herskovits(&self, candidate_node: NodeIndex<usize>) -> f64 {
         let mut prod: f64 = 1.0;
