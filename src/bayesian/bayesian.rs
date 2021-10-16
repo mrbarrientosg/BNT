@@ -41,7 +41,7 @@ impl<'a> BayesianNetwork<'a> {
             graph,
             size: scenario.parameters().nb_params(),
             scenario,
-            population: population,
+            population,
         }
     }
 
@@ -61,102 +61,222 @@ impl<'a> BayesianNetwork<'a> {
 
         self.graph = graph;
 
-        let max_edges = self.scenario.parameters().nb_params();
-        // let mut gains: Vec<Vec<f64>> = vec![];
+        // let max_edges = self.scenario.parameters().nb_params();
 
-        for node in 0..max_edges {
-            let mut p_old = self.cooper_herskovits(node.into());
-            let parent_size = self.graph.parents(node.into()).iter(&self.graph).count();
+        // for node in 0..max_edges {
+        //     let mut p_old = self.cooper_herskovits(node.into());
+        //     let parent_size = self.graph.parents(node.into()).iter(&self.graph).count();
 
-            let mut proceed = true;
+        //     let mut proceed = true;
 
-            while proceed && parent_size < 2 {
-                let mut p_max: Vec<f64> = vec![];
-                let pred = &self.scenario.parameters().params[..node];
-                let mut candidates_params: Vec<usize> = vec![];
+        //     while proceed && parent_size < 2 {
+        //         let mut p_max: Vec<f64> = vec![];
+        //         let pred = &self.scenario.parameters().params[..node];
+        //         let mut candidates_params: Vec<usize> = vec![];
 
-                for (i, p) in pred.iter().enumerate() {
-                    let c = self
-                        .graph
-                        .parents(node.into())
-                        .iter(&self.graph)
-                        .map(|(_, n)| &self.graph[n])
-                        .filter(|&n| n.name == p.name)
-                        .count();
+        //         for (i, p) in pred.iter().enumerate() {
+        //             let mut childrens = self.graph.children(i.into());
 
-                    if c == 0 || self.graph.parents(node.into()).iter(&self.graph).count() == 0 {
-                        candidates_params.push(i);
-                    }
-                }
+        //             let c = self
+        //                 .graph
+        //                 .parents(node.into())
+        //                 .iter(&self.graph)
+        //                 .map(|(_, n)| &self.graph[n])
+        //                 .filter(|&n| n.name == p.name)
+        //                 .count();
 
-                if !candidates_params.is_empty() {
-                    for j in candidates_params {
-                        let index = self
-                            .graph
-                            .add_edge(NodeIndex::new(j), NodeIndex::new(node), 1)
-                            .unwrap();
+        //             if (c == 0 || self.graph.parents(node.into()).iter(&self.graph).count() == 0)
+        //                 && !node_is_children(node.into(), &mut childrens, &self.graph)
+        //                 && !self.path_exists(node.into(), i.into())
+        //             {
+        //                 candidates_params.push(i);
+        //             }
+        //         }
 
-                        // println!(
-                        //     "{:?}",
-                        //     Dot::with_config(&self.graph, &[Config::EdgeNoLabel])
-                        // );
-                        p_max.push(self.cooper_herskovits(node.into()));
-                        self.graph.remove_edge(index).unwrap();
+        //         if !candidates_params.is_empty() {
+        //             for j in candidates_params {
+        // let index = self
+        //     .graph
+        //     .add_edge(NodeIndex::new(j), NodeIndex::new(node), 1)
+        //     .unwrap();
 
-                        // println!(
-                        //     "{:?}",
-                        //     Dot::with_config(&self.graph, &[Config::EdgeNoLabel])
-                        // );
-                    }
-                } else {
-                    p_max.push(self.cooper_herskovits(node.into()));
-                }
+        //                 // println!(
+        //                 //     "{:?}",
+        //                 //     Dot::with_config(&self.graph, &[Config::EdgeNoLabel])
+        //                 // );
+        //                 p_max.push(self.cooper_herskovits(node.into()));
+        // self.graph.remove_edge(index).unwrap();
 
-                let from = p_max
-                    .iter()
-                    .position_max_by(|&a, &b| a.partial_cmp(b).unwrap())
+        //                 // println!(
+        //                 //     "{:?}",
+        //                 //     Dot::with_config(&self.graph, &[Config::EdgeNoLabel])
+        //                 // );
+        //             }
+        //         } else {
+        //             p_max.push(self.cooper_herskovits(node.into()));
+        //         }
+
+        //         let from = p_max
+        //             .iter()
+        //             .position_max_by(|&a, &b| a.partial_cmp(b).unwrap())
+        //             .unwrap();
+        //         let p_new = p_max[from];
+
+        //         if p_new > p_old {
+        //             p_old = p_new;
+        //             self.graph
+        //                 .add_edge(NodeIndex::new(from), NodeIndex::new(node), 1)
+        //                 .unwrap();
+        //         } else {
+        //             proceed = false;
+        //         }
+
+        //         // println!("{:?}", p_max);
+        //     }
+        // }
+
+        let mut gains: Vec<Vec<f64>> =
+            vec![
+                vec![std::f64::NEG_INFINITY; self.scenario.parameters().nb_params()];
+                self.scenario.parameters().nb_params()
+            ];
+        let mut node_scores: Vec<f64> = vec![0.0; self.scenario.parameters().nb_params()];
+        let mut inheritance_mat: Vec<Vec<bool>> =
+            vec![
+                vec![false; self.scenario.parameters().nb_params()];
+                self.scenario.parameters().nb_params()
+            ];
+        let mut child_count = vec![0; self.scenario.parameters().nb_params()];
+
+        for i in 0..self.scenario.parameters().nb_params() {
+            node_scores[i] = self.cooper_herskovits(i.into());
+        }
+
+        for i in 0..self.scenario.parameters().nb_params() {
+            for j in (i + 1)..self.scenario.parameters().nb_params() {
+                let index = self
+                    .graph
+                    .add_edge(NodeIndex::new(j), NodeIndex::new(i), 1)
                     .unwrap();
-                let p_new = p_max[from];
 
-                if p_new > p_old {
-                    p_old = p_new;
-                    self.graph
-                        .add_edge(NodeIndex::new(from), NodeIndex::new(node), 1)
-                        .unwrap();
-                } else {
-                    proceed = false;
+                let new_score = self.cooper_herskovits(i.into());
+
+                self.graph.remove_edge(index).unwrap();
+
+                gains[i][j] = new_score - node_scores[i];
+                gains[j][i] = gains[i][j];
+            }
+        }
+
+        loop {
+            let (mut child, mut parent): (usize, usize) = (0, 0);
+            let mut max = std::f64::NEG_INFINITY;
+
+            for i in 0..gains.len() {
+                for j in 0..gains[i].len() {
+                    if gains[i][j] > max {
+                        max = gains[i][j];
+                        child = j;
+                        parent = i;
+                    }
                 }
-
-                // println!("{:?}", p_max);
             }
 
-            // let mut max_value = -1.0;
-            // let mut from: usize = 0;
-            // let mut to: usize = 0;
+            if gains[child][parent] == std::f64::NEG_INFINITY {
+                break;
+            }
 
-            // for (i, _) in self.scenario.parameters().into_iter().enumerate() {
-            //     let gain = self.compute_gains(NodeIndex::new(i));
+            self.graph
+                .add_edge(NodeIndex::new(parent), NodeIndex::new(child), 1)
+                .unwrap();
 
-            //     gains.push(gain);
+            node_scores[child] += gains[child][parent];
 
-            //     for (j, _) in self.scenario.parameters().into_iter().enumerate() {
-            //         let current_value = gains[i][j];
-            //         if current_value > max_value {
-            //             from = i;
-            //             to = j;
-            //             max_value = current_value;
-            //         }
-            //     }
-            // }
+            gains[child][parent] = std::f64::NEG_INFINITY;
+            gains[parent][child] = gains[child][parent];
 
-            // if max_value <= 0.0 {
-            //     break;
-            // }
+            inheritance_mat[child][parent] = true;
 
-            // self.graph
-            //     .add_edge(NodeIndex::new(from), NodeIndex::new(to), 1).unwrap();
+            let mut new_ancestors = vec![parent];
 
-            // gains.clear();
+            for i in 0..self.scenario.parameters().nb_params() {
+                if inheritance_mat[parent][i] == true && inheritance_mat[child][i] == false {
+                    new_ancestors.push(i);
+                    inheritance_mat[child][i] = true;
+                    gains[i][child] = std::f64::NEG_INFINITY;
+                }
+            }
+
+            let mut child_column: Vec<bool> = vec![false; self.scenario.parameters().nb_params()];
+
+            for i in 0..self.scenario.parameters().nb_params() {
+                child_column[i] = inheritance_mat[i][child];
+            }
+
+            let mut descendents = child_column
+                .iter()
+                .enumerate()
+                .filter(|(_, &b)| b == true)
+                .map(|(i, _)| i)
+                .collect_vec();
+
+            while !descendents.is_empty() {
+                let node = descendents.remove(0);
+                let mut node_updated = false;
+
+                for ancestor in new_ancestors.iter() {
+                    if inheritance_mat[node][*ancestor] == false {
+                        inheritance_mat[node][*ancestor] = true;
+                        gains[*ancestor][node] = std::f64::NEG_INFINITY;
+                        node_updated = true;
+                    }
+                }
+
+                if node_updated {
+                    let mut child_column: Vec<bool> = vec![false; inheritance_mat.len()];
+
+                    for i in 0..inheritance_mat.len() {
+                        child_column[i] = inheritance_mat[i][node];
+                    }
+
+                    descendents.append(
+                        &mut child_column
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, &b)| b == true)
+                            .map(|(i, _)| i)
+                            .collect_vec(),
+                    );
+
+                    descendents = descendents.iter().unique().map(|a| *a).collect_vec();
+                }
+            }
+
+            for i in 0..self.scenario.parameters().nb_params() {
+                if self.graph.find_edge(i.into(), child.into()).is_none()
+                    && inheritance_mat[i][child] == false
+                    && child != i
+                {
+                    let index = self
+                        .graph
+                        .add_edge(NodeIndex::new(i), NodeIndex::new(child), 1)
+                        .unwrap();
+
+                    let new_score = self.cooper_herskovits(child.into());
+
+                    self.graph.remove_edge(index).unwrap();
+
+                    gains[child][i] = new_score - node_scores[child];
+                }
+            }
+
+            child_count[child] += 1;
+
+            if child_count[child] == (self.scenario.parameters().nb_params() / 2) {
+                for j in 0..self.scenario.parameters().nb_params() {
+                    gains[child][j] = std::f64::NEG_INFINITY;
+                }
+            }
         }
     }
 
@@ -500,6 +620,8 @@ impl<'a> BayesianNetwork<'a> {
 
 #[cfg(test)]
 mod bayesian_tests {
+    use std::{fs::File, rc::Rc};
+
     use daggy::petgraph::dot::{Config, Dot};
 
     use crate::{
@@ -515,54 +637,16 @@ mod bayesian_tests {
 
     #[test]
     fn network_creation() {
-        let scenario = Scenario::new()
-            .add_parameter(Parameter::new("x1", "x1", Domain::Integer(0, 1)))
-            .add_parameter(Parameter::new("x2", "x2", Domain::Integer(0, 1)))
-            .add_parameter(Parameter::new("x3", "x3", Domain::Integer(0, 1)));
+        let scenario = Scenario::from_file(
+            Some(File::open("./examples/acotsp/scenario.toml").unwrap()),
+            Some(File::open("./examples/acotsp/parameters.toml").unwrap()),
+        );
 
-        let population = Population::new(10, 10);
-        population
-            .borrow_mut()
-            .individuals
-            .push(Individual::from_sample(&vec![1, 0, 0]));
-        population
-            .borrow_mut()
-            .individuals
-            .push(Individual::from_sample(&vec![1, 1, 1]));
-        population
-            .borrow_mut()
-            .individuals
-            .push(Individual::from_sample(&vec![0, 0, 1]));
-        population
-            .borrow_mut()
-            .individuals
-            .push(Individual::from_sample(&vec![1, 1, 1]));
-        population
-            .borrow_mut()
-            .individuals
-            .push(Individual::from_sample(&vec![0, 0, 0]));
-        population
-            .borrow_mut()
-            .individuals
-            .push(Individual::from_sample(&vec![0, 1, 1]));
-        population
-            .borrow_mut()
-            .individuals
-            .push(Individual::from_sample(&vec![1, 1, 1]));
-        population
-            .borrow_mut()
-            .individuals
-            .push(Individual::from_sample(&vec![0, 0, 0]));
-        population
-            .borrow_mut()
-            .individuals
-            .push(Individual::from_sample(&vec![1, 1, 1]));
-        population
-            .borrow_mut()
-            .individuals
-            .push(Individual::from_sample(&vec![0, 0, 0]));
+        let population = Population::new(110, 33);
+        population.borrow_mut().initialize(&scenario);
 
-        let mut bayesian = BayesianNetwork::new(&scenario, population);
+        let mut bayesian = BayesianNetwork::new(&scenario, Rc::clone(&population));
+        population.borrow_mut().reduce();
         bayesian.construct_network();
 
         println!(
