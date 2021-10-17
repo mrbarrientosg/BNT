@@ -333,7 +333,7 @@ impl<'a> BayesianNetwork<'a> {
         for i in 0..self.graph.node_count() {
             let parents_size = self.graph.parents(i.into()).iter(&self.graph).count();
 
-            if parents_size < 3 && viable.contains(&i.into()) {
+            if parents_size < 2 && viable.contains(&i.into()) {
                 let index = self
                     .graph
                     .add_edge(node_index.clone(), NodeIndex::new(i), 1)
@@ -681,7 +681,7 @@ mod bayesian_tests {
         );
 
         let population = Population::new(110, 33);
-        population.borrow_mut().initialize(&scenario);
+        // population.borrow_mut().initialize(&scenario);
 
         let mut bayesian = BayesianNetwork::new(&scenario, Rc::clone(&population));
         population.borrow_mut().reduce();

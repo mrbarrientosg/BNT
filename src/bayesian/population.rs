@@ -75,51 +75,42 @@ impl Individual {
         configuration
     }
 
-    pub(crate) fn run_target_runner(&mut self, scenario: &Scenario, seeds: &Vec<u32>) {
-        for ((id, instance), seed) in scenario
-            .train_instances()
-            .iter()
-            .enumerate()
-            .zip(seeds.iter())
-        {
-            let mut command = Command::new(scenario.target_runner());
+    pub(crate) fn run_target_runner(&mut self, scenario: &Scenario, instance: (usize, u32, String)) {
+        let mut command = Command::new(scenario.target_runner());
 
-            command
-                .arg(self.id.to_string())
-                .arg(id.to_string())
-                .arg(seed.to_string())
-                .arg(instance);
+        command
+            .arg(self.id.to_string())
+            .arg(instance.0.to_string())
+            .arg(instance.1.to_string())
+            .arg(instance.2);
 
-            for (parameter, &idx) in scenario.parameters().into_iter().zip(self.solution.iter()) {
-                command.arg(parameter.switch.clone() + &parameter.get_value(idx));
-            }
-
-            let result = command.output();
-
-            match result {
-                Ok(output) => {
-                    let error = match String::from_utf8(output.stderr) {
-                        Ok(err) => err,
-                        Err(_) => "".to_string(),
-                    };
-
-                    if !error.is_empty() {
-                        eprintln!("{}", error);
-                    }
-
-                    let fitness: f64 = String::from_utf8(output.stdout)
-                        .expect("Bad output")
-                        .trim()
-                        .parse()
-                        .unwrap();
-
-                    self.fitness += fitness;
-                }
-                Err(error) => panic!("{}", error),
-            }
+        for (parameter, &idx) in scenario.parameters().into_iter().zip(self.solution.iter()) {
+            command.arg(parameter.switch.clone() + &parameter.get_value(idx));
         }
 
-        self.fitness /= scenario.train_instances().len() as f64;
+        let result = command.output();
+
+        match result {
+            Ok(output) => {
+                let error = match String::from_utf8(output.stderr) {
+                    Ok(err) => err,
+                    Err(_) => "".to_string(),
+                };
+
+                if !error.is_empty() {
+                    eprintln!("{}", error);
+                }
+
+                let fitness: f64 = String::from_utf8(output.stdout)
+                    .expect("Bad output")
+                    .trim()
+                    .parse()
+                    .unwrap();
+
+                self.fitness = fitness;
+            }
+            Err(error) => panic!("{}", error),
+        }
     }
 }
 
@@ -141,7 +132,7 @@ impl Population {
         }))
     }
 
-    pub(crate) fn initialize(&mut self, scenario: &Scenario) {
+    pub(crate) fn initialize(&mut self, scenario: &Scenario, instance: (usize, u32, String)) {
         for _ in 0..self.population_size {
             let mut individual = Individual::new(scenario);
             individual.id = self.last_individual_id;
@@ -149,25 +140,20 @@ impl Population {
             self.last_individual_id += 1;
         }
 
-        let rng = thread_rng();
-        let mut r = StdRng::from_rng(rng.clone()).unwrap();
-        let seeds: Vec<u32> = (0..scenario.train_instances().len())
-            .map(|_| r.next_u32())
-            .collect();
-
         self.individuals
             .par_iter_mut()
-            .for_each(|indi| indi.run_target_runner(scenario, &seeds));
+            .for_each(|indi| indi.run_target_runner(scenario, instance.clone()));
     }
 
     pub(crate) fn population_size(&self) -> usize {
         self.population_size
     }
 
-    pub(crate) fn run_new_individuals(
+    pub(crate) fn run_individuals(
         &mut self,
         samples: &Vec<Vec<usize>>,
         scenario: &Scenario,
+        instance: (usize, u32, String)
     ) -> Vec<Individual> {
         let mut individuals: Vec<Individual> = vec![];
 
@@ -178,21 +164,13 @@ impl Population {
             self.last_individual_id += 1;
         }
 
-        let rng = thread_rng();
-
-        let mut r = StdRng::from_rng(rng.clone()).unwrap();
-        let seeds: Vec<u32> = (0..scenario.train_instances().len())
-            .map(|_| r.next_u32())
-            .collect();
-
-        individuals
-            .par_iter_mut()
-            .for_each(|indi| indi.run_target_runner(scenario, &seeds));
-
         let copy_individuals = individuals.clone();
 
         self.individuals.append(&mut individuals);
         self.population_size += individuals.len();
+        self.individuals
+            .par_iter_mut()
+            .for_each(|indi| indi.run_target_runner(scenario, instance.clone()));
 
         copy_individuals
     }

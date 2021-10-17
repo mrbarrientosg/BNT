@@ -9,6 +9,7 @@ use crate::{
 use daggy::petgraph::dot::{Config, Dot};
 use is_executable::IsExecutable;
 use itertools::Itertools;
+use rand::{prelude::StdRng, thread_rng, RngCore, SeedableRng};
 use std::{cell::RefCell, path::Path, rc::Rc};
 
 pub struct BayesianConfig {
@@ -25,7 +26,7 @@ impl BayesianConfig {
             population_size,
             max_iterations: 5 * scenario.parameters().nb_params(),
             select_size: (0.3 * population_size as f64).ceil() as usize,
-            nb_children: population_size / 2 
+            nb_children: population_size / 2,
         }
     }
 }
@@ -35,6 +36,9 @@ pub struct BayesianTuning<'a> {
     network: BayesianNetwork<'a>,
     config: BayesianConfig,
     configurations: Vec<Individual>,
+    elitists: Vec<(usize, Individual)>,
+    instances: Vec<(usize, u32, String)>,
+    last_instance: usize,
 }
 
 impl<'a> BayesianTuning<'a> {
@@ -49,10 +53,13 @@ impl<'a> BayesianTuning<'a> {
             population,
             config,
             configurations: vec![],
+            elitists: vec![],
+            instances: vec![],
+            last_instance: 0,
         }
     }
 
-    pub(crate) fn save_configurations(&self) {
+    fn save_configurations(&self) {
         let mut csv = csv::Writer::from_path("configurations.csv").unwrap();
 
         let mut columns = self
@@ -86,6 +93,57 @@ impl<'a> BayesianTuning<'a> {
         csv.flush().unwrap();
     }
 
+    fn save_elitists(&self) {
+        let mut csv = csv::Writer::from_path("elitists.csv").unwrap();
+
+        let mut columns = self
+            .scenario
+            .parameters()
+            .into_iter()
+            .map(|param| param.name.clone())
+            .collect_vec();
+
+        columns.insert(0, "id".to_string());
+        columns.push("fitness".to_string());
+
+        csv.write_record(columns).unwrap();
+
+        for (_, individual) in &self.elitists {
+            let mut values = individual
+                .get_configuration(self.scenario)
+                .into_iter()
+                .map(|solution| match solution {
+                    SolutionType::Integer(value) => value.to_string(),
+                    SolutionType::Categorical(value) => value.clone(),
+                })
+                .collect_vec();
+
+            values.insert(0, individual.id.to_string());
+            values.push(individual.fitness.to_string());
+
+            csv.write_record(values).unwrap();
+        }
+
+        csv.flush().unwrap();
+    }
+
+    fn create_instance(&mut self) -> (usize, u32, String) {
+        let rng = thread_rng();
+        let mut r = StdRng::from_rng(rng.clone()).unwrap();
+
+        let instance = (
+            self.last_instance,
+            r.next_u32(),
+            self.scenario.train_instances()
+                [self.last_instance % self.scenario.train_instances().len()]
+            .clone(),
+        );
+
+        self.last_instance += 1;
+
+        instance
+    }
+
     pub fn run(&mut self) {
         let target_runner_path = Path::new(self.scenario.target_runner());
 
@@ -104,10 +162,13 @@ impl<'a> BayesianTuning<'a> {
         println!("# New individual size: {}", self.config.nb_children);
         println!("");
 
+        let instance = self.create_instance();
+        self.instances.push(instance.clone());
+
         self.population
             .try_borrow_mut()
             .unwrap()
-            .initialize(self.scenario);
+            .initialize(self.scenario, instance);
         self.population.try_borrow_mut().unwrap().sort();
 
         for individual in self.population.try_borrow().unwrap().into_iter() {
@@ -125,12 +186,16 @@ impl<'a> BayesianTuning<'a> {
 
             let samples = self.network.sample(self.config.nb_children);
 
+            let instance = self.create_instance();
+            self.instances.push(instance.clone());
+
             let individuals = self
                 .population
                 .try_borrow_mut()
                 .unwrap()
-                .run_new_individuals(&samples, self.scenario);
+                .run_individuals(&samples, self.scenario, instance);
 
+            
             for new_individual in individuals.iter() {
                 self.configurations.push(new_individual.clone());
             }
@@ -138,7 +203,10 @@ impl<'a> BayesianTuning<'a> {
             self.population.try_borrow_mut().unwrap().sort();
             self.population.try_borrow_mut().unwrap().reduce();
 
-            best = Some(self.population.try_borrow().unwrap().best());
+            if best.is_some() && best.as_ref().unwrap().id != self.population.try_borrow().unwrap().best().id {
+                best = Some(self.population.try_borrow().unwrap().best());
+                self.elitists.push((i + 1, best.as_ref().unwrap().clone()));
+            }
 
             println!(
                 "Best-so-far configuration: {} \t fitness: {}",
@@ -157,6 +225,7 @@ impl<'a> BayesianTuning<'a> {
         }
 
         self.save_configurations();
+        self.save_elitists();
 
         println!(
             "Best-so-far configuration: {} \t fitness: {}",
