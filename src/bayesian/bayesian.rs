@@ -61,10 +61,10 @@ impl<'a> BayesianNetwork<'a> {
 
         self.graph = graph;
 
-        let max_edges = 3 * self.population.borrow().population_size();
+        //let max_edges = 3 * self.scenario.parameters().nb_params();
         let mut gains: Vec<Vec<f64>> = vec![];
 
-        for _ in 0..max_edges {
+        loop {
             let mut max = -1.0;
             let mut from: i32 = -1;
             let mut to: i32 = -1;
@@ -99,7 +99,7 @@ impl<'a> BayesianNetwork<'a> {
 
         // for node in 0..max_edges {
         //     let mut p_old = self.cooper_herskovits(node.into());
-        //     let parent_size = self.graph.parents(node.into()).iter(&self.graph).count();
+        //     let mut parent_size = self.graph.parents(node.into()).iter(&self.graph).count();
 
         //     let mut proceed = true;
 
@@ -109,8 +109,6 @@ impl<'a> BayesianNetwork<'a> {
         //         let mut candidates_params: Vec<usize> = vec![];
 
         //         for (i, p) in pred.iter().enumerate() {
-        //             let mut childrens = self.graph.children(i.into());
-
         //             let c = self
         //                 .graph
         //                 .parents(node.into())
@@ -119,27 +117,24 @@ impl<'a> BayesianNetwork<'a> {
         //                 .filter(|&n| n.name == p.name)
         //                 .count();
 
-        //             if (c == 0 || self.graph.parents(node.into()).iter(&self.graph).count() == 0)
-        //                 && !node_is_children(node.into(), &mut childrens, &self.graph)
-        //                 && !self.path_exists(node.into(), i.into())
-        //             {
+        //             if c == 0 || self.graph.parents(node.into()).iter(&self.graph).count() == 0 {
         //                 candidates_params.push(i);
         //             }
         //         }
 
         //         if !candidates_params.is_empty() {
         //             for j in candidates_params {
-        // let index = self
-        //     .graph
-        //     .add_edge(NodeIndex::new(j), NodeIndex::new(node), 1)
-        //     .unwrap();
+        //                 let index = self
+        //                     .graph
+        //                     .add_edge(NodeIndex::new(j), NodeIndex::new(node), 1)
+        //                     .unwrap();
 
         //                 // println!(
         //                 //     "{:?}",
         //                 //     Dot::with_config(&self.graph, &[Config::EdgeNoLabel])
         //                 // );
         //                 p_max.push(self.cooper_herskovits(node.into()));
-        // self.graph.remove_edge(index).unwrap();
+        //                 self.graph.remove_edge(index).unwrap();
 
         //                 // println!(
         //                 //     "{:?}",
@@ -156,6 +151,9 @@ impl<'a> BayesianNetwork<'a> {
         //             .unwrap();
         //         let p_new = p_max[from];
 
+        //         println!("{}, {}", p_new, p_old);
+        //         println!("");
+
         //         if p_new > p_old {
         //             p_old = p_new;
         //             self.graph
@@ -164,6 +162,8 @@ impl<'a> BayesianNetwork<'a> {
         //         } else {
         //             proceed = false;
         //         }
+
+        //         parent_size = self.graph.parents(node.into()).iter(&self.graph).count();
 
         //         // println!("{:?}", p_max);
         //     }
@@ -440,7 +440,7 @@ impl<'a> BayesianNetwork<'a> {
 
                 let nij: usize = a.iter().sum();
 
-                prod *= (r_i - 1).checked_factorial().unwrap_or(1) as f64
+                prod *= (r_i - 1) as f64
                     / (nij + r_i - 1).checked_factorial().unwrap_or(1) as f64;
 
                 for value in a {
@@ -453,7 +453,7 @@ impl<'a> BayesianNetwork<'a> {
                 .collect();
             let nij: usize = a.iter().sum();
 
-            prod *= (r_i - 1).checked_factorial().unwrap_or(1) as f64
+            prod *= (r_i - 1) as f64
                 / (nij + r_i - 1).checked_factorial().unwrap_or(1) as f64;
 
             for value in a {
@@ -681,7 +681,9 @@ mod bayesian_tests {
         );
 
         let population = Population::new(110, 33);
-        // population.borrow_mut().initialize(&scenario);
+        population
+            .borrow_mut()
+            .initialize(&scenario, (0, 0, "".into()));
 
         let mut bayesian = BayesianNetwork::new(&scenario, Rc::clone(&population));
         population.borrow_mut().reduce();

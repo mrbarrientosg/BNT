@@ -176,5 +176,5 @@ domain = [5, 50]
 [dlb]
 name = "dlb"
 switch = "--dlb "
-type = "c"
-domain = ["0", "1"]
+type = "i"
+domain = [0, 1]

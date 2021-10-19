@@ -26,7 +26,7 @@ impl BayesianConfig {
             population_size,
             max_iterations: 5 * scenario.parameters().nb_params(),
             select_size: (0.3 * population_size as f64).ceil() as usize,
-            nb_children: population_size / 2,
+            nb_children: (0.3 * population_size as f64).ceil() as usize,
         }
     }
 }
@@ -189,13 +189,12 @@ impl<'a> BayesianTuning<'a> {
             let instance = self.create_instance();
             self.instances.push(instance.clone());
 
-            let individuals = self
-                .population
-                .try_borrow_mut()
-                .unwrap()
-                .run_individuals(&samples, self.scenario, instance);
+            let individuals = self.population.try_borrow_mut().unwrap().run_individuals(
+                &samples,
+                self.scenario,
+                instance,
+            );
 
-            
             for new_individual in individuals.iter() {
                 self.configurations.push(new_individual.clone());
             }
@@ -203,7 +202,14 @@ impl<'a> BayesianTuning<'a> {
             self.population.try_borrow_mut().unwrap().sort();
             self.population.try_borrow_mut().unwrap().reduce();
 
-            if best.is_some() && best.as_ref().unwrap().id != self.population.try_borrow().unwrap().best().id {
+            if best.is_some()
+                && best.as_ref().unwrap().id != self.population.try_borrow().unwrap().best().id
+                && !self
+                    .elitists
+                    .iter()
+                    .map(|(_, b)| b)
+                    .contains(&self.population.try_borrow().unwrap().best())
+            {
                 best = Some(self.population.try_borrow().unwrap().best());
                 self.elitists.push((i + 1, best.as_ref().unwrap().clone()));
             }

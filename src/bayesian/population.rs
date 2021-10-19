@@ -114,6 +114,13 @@ impl Individual {
     }
 }
 
+impl PartialEq for Individual {
+
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct Population {
     pub(crate) individuals: Vec<Individual>,
