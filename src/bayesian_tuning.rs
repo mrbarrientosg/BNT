@@ -196,7 +196,17 @@ impl<'a> BayesianTuning<'a> {
             );
 
             for new_individual in individuals.iter() {
-                self.configurations.push(new_individual.clone());
+                self.configurations.push(
+                    self.population
+                        .try_borrow()
+                        .unwrap()
+                        .individuals
+                        .iter()
+                        .find_position(|&i| i.id == new_individual.id)
+                        .unwrap()
+                        .1
+                        .clone(),
+                );
             }
 
             self.population.try_borrow_mut().unwrap().sort();
