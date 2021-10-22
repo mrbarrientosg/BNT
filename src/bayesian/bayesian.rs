@@ -9,6 +9,7 @@ use itertools::Itertools;
 use rand::Rng;
 use std::cell::RefCell;
 
+use std::fmt::Display;
 use std::rc::Rc;
 
 use super::population::Population;
@@ -18,6 +19,13 @@ pub(crate) struct BayesianNode {
     pub(crate) index: usize,
     pub(crate) name: String,
 }
+
+impl Display for BayesianNode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
 
 pub(crate) struct BayesianNetwork<'a> {
     graph: Dag<BayesianNode, usize, usize>,
@@ -523,19 +531,13 @@ impl<'a> BayesianNetwork<'a> {
 
         for i in ordered {
             if self.graph.parents(*i).iter(&self.graph).count() == 0 {
-                let param_domain_size: usize = self
-                    .scenario
-                    .parameters()
-                    .get_parameter(i.index())
-                    .domain_size();
-
                 let prob = self.marginal_probability(*i);
 
                 let mut sumprob: f64 = 0.0;
                 let mut index = 0;
                 let value: f64 = rng.gen();
 
-                for j in 0..param_domain_size {
+                for j in 0..prob.len() {
                     index = j;
                     sumprob += prob[j];
 
@@ -551,19 +553,13 @@ impl<'a> BayesianNetwork<'a> {
         }
 
         for i in node_with_parents {
-            let param_domain_size: usize = self
-                .scenario
-                .parameters()
-                .get_parameter(i.index())
-                .domain_size();
-
             let prob = self.calculate_probability(i, &sample);
-
+            
             let mut sumprob: f64 = 0.0;
             let mut index = 0;
             let value: f64 = rng.gen();
 
-            for j in 0..param_domain_size {
+            for j in 0..prob.len() {
                 index = j;
                 sumprob += prob[j];
 
@@ -630,7 +626,9 @@ impl<'a> BayesianNetwork<'a> {
 
         for k in 0..r_i {
             let num_of_samples_all = self.alpha(k, &v_i, &x_i, &x_parents, Some(&phi_j)) as f64;
-            prob[k] = (num_of_samples_all + 1.0) / (num_of_samples_parents + 1.0 * r_i as f64);
+            if num_of_samples_all > 0.0 {
+                prob[k] = (num_of_samples_all + 1.0) / (num_of_samples_parents + 1.0 * r_i as f64);
+            }
         }
 
         prob
@@ -689,8 +687,10 @@ mod bayesian_tests {
         population.borrow_mut().reduce();
         bayesian.construct_network();
 
+        println!("{:?}", bayesian.sample(5));
+
         println!(
-            "{:?}",
+            "{}",
             Dot::with_config(&bayesian.graph, &[Config::EdgeNoLabel])
         );
     }

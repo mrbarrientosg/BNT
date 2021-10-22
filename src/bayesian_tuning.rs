@@ -25,8 +25,8 @@ impl BayesianConfig {
         Self {
             population_size,
             max_iterations: 5 * scenario.parameters().nb_params(),
-            select_size: (2.0 * (population_size as f64).log2()).ceil() as usize,
-            nb_children: ((population_size as f64).log2()).ceil() as usize,
+            select_size: (0.3 * population_size as f64).ceil() as usize,
+            nb_children: population_size / 2,
         }
     }
 }
@@ -234,7 +234,7 @@ impl<'a> BayesianTuning<'a> {
             println!("");
             println!("Bayesian network representation:");
             println!(
-                "{:?}",
+                "{}",
                 Dot::with_config(self.network.dag(), &[Config::EdgeNoLabel])
             );
             println!("");
@@ -253,7 +253,7 @@ impl<'a> BayesianTuning<'a> {
         println!("");
         println!("Bayesian network representation:");
         println!(
-            "{:?}",
+            "{}",
             Dot::with_config(self.network.dag(), &[Config::EdgeNoLabel])
         );
     }

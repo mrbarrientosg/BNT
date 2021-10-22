@@ -27,6 +27,11 @@ fn main() {
                 .value_name("FILE")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("max_iterations")
+                .long("iterations")
+                .short("i"),
+        )
         .get_matches();
 
     let mut scenario_file: Option<File> = None;
@@ -46,7 +51,17 @@ fn main() {
     }
 
     let scenario = Scenario::from_file(scenario_file, parameter_file);
-    let mut tuning = BayesianTuning::new(&scenario, BayesianConfig::new(&scenario));
+
+    let mut config = BayesianConfig::new(&scenario);
+
+    if let Some(iterations) = matches.value_of("max_iterations") {
+        match iterations.parse::<usize>() {
+            Ok(iter) => config.max_iterations = iter,
+            Err(_) => (),
+        }
+    }
+
+    let mut tuning = BayesianTuning::new(&scenario, config);
 
     tuning.run();
 }

@@ -147,9 +147,9 @@ impl Population {
             self.last_individual_id += 1;
         }
 
-        self.individuals
-            .par_iter_mut()
-            .for_each(|indi| indi.run_target_runner(scenario, instance.clone()));
+        // self.individuals
+        //     .par_iter_mut()
+        //     .for_each(|indi| indi.run_target_runner(scenario, instance.clone()));
     }
 
     pub(crate) fn population_size(&self) -> usize {
