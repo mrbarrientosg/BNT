@@ -30,7 +30,8 @@ fn main() {
         .arg(
             Arg::with_name("max_iterations")
                 .long("iterations")
-                .short("i"),
+                .short("i")
+                .takes_value(true),
         )
         .get_matches();
 
